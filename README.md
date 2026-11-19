@@ -12,21 +12,21 @@ Punishments came in three varieties, triggered by running the following commands
 When these commands were dispatched by a user, the plugin intercepted the commands after permission checks but before the Minecraft server's native command validation and execution. 
 
 PunishmentLogger worked from a MySQL database, with its own MySQL user given permissions only for this database.  When one of the above commands was run, the following code was executed:  
-![][image1]  
+![SQL injection code](images/image1.png)
 For example, when user “Admin” punished user “Attacker” using the command:  
 /ban Attacker
 
 The SQL statement became:  
-![][image2]
+![Generated SQL statement](images/image2.png)
 
 At the time of writing the code, I was unaware of SQL injections, and so performed no cleaning or validation of the data.  Further, the SQL query was not in the form of a prepared statement, and so was vulnerable to injection.  Some time afterwards, during University, I realised the flaw.  To test my theory, I created a blank testing server with PunishmentLogger active, and ran the following command:  
 /ban ‘TEST’,’TEST’,’TEST’,’TEST’);\#
 
 This correctly ran the following SQL statement:  
-![][image3]
+![SQL injection result](images/image3.png)
 
 And the injected entry appeared in the punishments table:  
-![][image4]
+![Database entry](images/image4.png)
 
 **Potential Damages:**  
 While a severe threat that threatened the workings and validity of the punishment logs, this injection lacked any real way to escalate beyond this one database.  The MySQL user running this query had only permissions for this table, and stacked queries were disallowed by JDBC, the Java connector used to run these MySQL statements.  
@@ -36,7 +36,7 @@ The greater threat from this vulnerability came from PunishmentLogger’s second
 
 To achieve this, each server ran its own version of PunishmentLogger, which both inserted logs into the database, and listened for new logs entering the database from other servers.  When a new punishment was inserted, the PunishmentLoggers running on other servers would read this data, and execute Minecraft commands to apply the punishments to their servers via:
 
-![][image5]
+![Command execution code](images/image5.png)
 
 If the punishment it read had been:  
 target \= “Attacker”  
@@ -67,7 +67,7 @@ Remediating this vulnerability required fixing both the data access layer (preve
 
 1. Parameterized Queries	  
    All string concatenated Statement queries were replaced with parameterized PreparedStatement objects in JDBC.  This separated SQL structure from user supplied data, so input such as 'Attacker','op','','');\# is treated as literal data rather than SQL syntax.  
-   ![][image6]  
+   ![Parameterized query code](images/image6.png)
 2. Strict Command Allowlisting and Input Validation  
    Even with parameterized queries, a compromised database or bug elsewhere could potentially place unexpected values into the punishment or target columns.  Before calling Bukkit.dispatchCommand, PunishmentLogger:  
 - Enforces an explicit allowlist for “punishment” ensuring the command that is ran can be only “mute” “ban” and “tempban”, to prevent escalation.  
